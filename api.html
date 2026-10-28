@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API — orcas.live</title>
+<meta name="description" content="Free, read-only JSON API for which Orcas Island businesses are open now. Endpoints, filters, response fields and embed examples.">
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+pre{background:var(--card);border:1px solid var(--rule);border-radius:10px;padding:.9rem 1rem;overflow-x:auto;font-size:.88rem;line-height:1.5;margin:.6rem 0}
+pre code{font-size:inherit}
+table{border-collapse:collapse;width:100%;font-size:.95rem;display:block;overflow-x:auto}
+th,td{text-align:left;padding:.4rem .7rem .4rem 0;border-bottom:1px solid var(--rule);vertical-align:top}
+th{color:var(--muted);font-weight:600}
+.ep{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:600}
+</style>
+</head>
+<body>
+<header class="site">
+  <a class="brand" href="/">orcas<span>.live</span></a>
+  <nav aria-label="Main"><a href="/">Home</a><a href="/preview/">Preview</a><a href="/api">API</a><a href="/sms">Text updates</a></nav>
+</header>
+<main>
+  <h1>orcas.live API</h1>
+  <p class="lede">A free, read-only JSON API for which Orcas Island businesses are open right now. Use it to put an &ldquo;open now&rdquo; list on your own site.</p>
+
+  <div class="card">
+    <dl class="keyval">
+      <dt>Base URL</dt><dd><code>https://api.orcas.live</code></dd>
+      <dt>Format</dt><dd>JSON, GET requests only</dd>
+      <dt>Auth</dt><dd>None. No key needed.</dd>
+      <dt>CORS</dt><dd>Open to any origin, so you can call it from the browser</dd>
+      <dt>Rate limit</dt><dd>About 120 requests per minute per client. Responses are cached for about 20 seconds, so polling faster gains nothing.</dd>
+      <dt>Time zone</dt><dd>All times are Orcas Island local time (Pacific), without an offset</dd>
+    </dl>
+  </div>
+
+  <h2>Endpoints</h2>
+  <table>
+    <tr><th>Endpoint</th><th>Returns</th></tr>
+    <tr><td class="ep">GET /v1/open-now</td><td>Businesses open now, as an object grouped by area slug. Includes ones closing soon.</td></tr>
+    <tr><td class="ep">GET /v1/businesses</td><td>Every listed business as an array, open or not, sorted by name.</td></tr>
+    <tr><td class="ep">GET /v1/businesses/{id}</td><td>One business. 404 if the id does not exist.</td></tr>
+    <tr><td class="ep">GET /v1/areas</td><td>The list of areas, with slug and display name.</td></tr>
+    <tr><td class="ep">GET /healthz</td><td>Plain text <code>ok</code> when the service is up.</td></tr>
+  </table>
+
+  <h2>Filters</h2>
+  <p>These query parameters work on <code>/v1/open-now</code> and <code>/v1/businesses</code>, and can be combined.</p>
+  <table>
+    <tr><th>Parameter</th><th>Values</th></tr>
+    <tr><td class="ep">area</td><td><code>eastsound</code>, <code>ferry_landing</code>, <code>westsound</code>, <code>doe_bay</code>, <code>deer_harbor</code>, <code>rosario</code>, <code>other</code></td></tr>
+    <tr><td class="ep">type</td><td><code>bar</code>, <code>restaurant</code>, <code>shop</code>, <code>service</code></td></tr>
+    <tr><td class="ep">category</td><td>Exact category, such as <code>pub</code> or <code>coffee shop</code> (not case sensitive)</td></tr>
+    <tr><td class="ep">q</td><td>Text to find in the business name</td></tr>
+  </table>
+  <pre><code>curl "https://api.orcas.live/v1/open-now?area=eastsound&amp;type=restaurant"</code></pre>
+
+  <h2>A business</h2>
+<pre><code>{
+  "id": 12,
+  "name": "The Lower Tavern",
+  "area": "eastsound",
+  "type": "bar",
+  "category": "pub",
+  "address": "...",
+  "phone": "+13603764848",
+  "website": "https://...",
+  "menu_url": null,
+  "lat": 48.69,
+  "lng": -122.90,
+  "closure": null,
+  "status": { "state": "open", "next_change": "2026-10-28T22:00:00" },
+  "next_change": "2026-10-28T22:00:00",
+  "stale": true,
+  "weekly": [
+    { "weekday": 0, "open": "11:00:00", "close": "22:00:00", "valid_from": null, "valid_to": null }
+  ],
+  "recurring_events": [
+    { "weekday": 2, "title": "Trivia", "start": "19:00:00", "end": null, "note": null, "valid_from": null, "valid_to": null }
+  ],
+  "events": [
+    { "title": "Halloween DJ Dance Party", "date": "2026-10-31", "start": "21:30:00", "end": null, "description": "9:30ish to close" }
+  ],
+  "last_confirmed": null
+}</code></pre>
+  <table>
+    <tr><th>Field</th><th>Meaning</th></tr>
+    <tr><td class="ep">type</td><td><code>bar</code>, <code>restaurant</code>, <code>shop</code> or <code>service</code></td></tr>
+    <tr><td class="ep">status.state</td><td><code>open</code>, <code>closing_soon</code>, <code>opening_soon</code>, <code>closed</code> or <code>unknown</code></td></tr>
+    <tr><td class="ep">status.next_change</td><td>When the current window ends if open, or when the next one starts if closed. May be null.</td></tr>
+    <tr><td class="ep">stale</td><td><code>true</code> when the owner has not confirmed the hours recently, or never. Treat the hours as a best guess.</td></tr>
+    <tr><td class="ep">last_confirmed</td><td>When the owner last confirmed the hours (UTC), or null</td></tr>
+    <tr><td class="ep">closure</td><td>Set while closed for the season, such as <code>{"label": "May 2027", "until": "2027-05-31"}</code>. Otherwise null.</td></tr>
+    <tr><td class="ep">weekly</td><td>Recurring hours. <code>weekday</code> is 0 for Monday through 6 for Sunday. A close time earlier than the open time means it closes after midnight. A day can have several rows. <code>valid_from</code> and <code>valid_to</code> mark seasonal hours.</td></tr>
+    <tr><td class="ep">recurring_events</td><td>Weekly events such as trivia. <code>start</code> and <code>end</code> may be null when the time is unknown. Check <code>valid_from</code> and <code>valid_to</code> for seasonal ones.</td></tr>
+    <tr><td class="ep">events</td><td>Upcoming one-time events, soonest first. <code>start</code> is null for an all-day event.</td></tr>
+    <tr><td class="ep">lat, lng, phone, website, menu_url, address</td><td>May be null. Phone numbers are in E.164 format.</td></tr>
+  </table>
+
+  <h2>Embed example</h2>
+<pre><code>&lt;ul id="open"&gt;&lt;/ul&gt;
+&lt;script&gt;
+fetch("https://api.orcas.live/v1/open-now?area=eastsound")
+  .then(r =&gt; r.json())
+  .then(byArea =&gt; {
+    const list = document.getElementById("open");
+    for (const b of Object.values(byArea).flat()) {
+      const li = document.createElement("li");
+      li.textContent = b.name;
+      list.append(li);
+    }
+  });
+&lt;/script&gt;</code></pre>
+
+  <h2>Please</h2>
+  <ul>
+    <li>Cache responses on your side for at least 30 seconds.</li>
+    <li>Show the &ldquo;not confirmed&rdquo; state when <code>stale</code> is true.</li>
+    <li>Credit <a href="/">orcas.live</a>, and &copy; OpenStreetMap contributors for location data.</li>
+    <li>Questions or a feature you need? Email <a href="mailto:c@orcode.io">c@orcode.io</a>.</li>
+  </ul>
+</main>
+<footer>orcas.live is built on Orcas Island, WA. <a href="/sms">Text updates &amp; privacy</a></footer>
+</body>
+</html>
