@@ -7,6 +7,18 @@
 <meta name="description" content="A free community directory of which businesses on Orcas Island, WA are open right now.">
 <link rel="stylesheet" href="/style.css">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
+
+<style>
+.shots{margin:2rem 0}.shots figure{margin:0;text-align:center}
+.shots img{width:min(100%,280px);height:auto;border-radius:22px;border:1px solid var(--rule);box-shadow:0 8px 24px rgba(0,0,0,.18)}
+.shots figcaption{margin-top:.75rem;color:var(--muted);font-size:.95rem}
+.shots .ctl{display:flex;justify-content:center;align-items:center;gap:.75rem;margin-top:.75rem}
+.shots button{font:inherit;color:var(--accent);background:none;border:1.5px solid var(--accent);border-radius:99px;padding:.35rem .9rem;cursor:pointer}
+.shots button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.shots .dots button{width:14px;height:14px;padding:0;border-radius:50%}
+.shots .dots button[aria-current="true"]{background:var(--accent)}
+.shots .dots{display:flex;gap:.5rem}
+</style>
 </head>
 <body>
 <header class="site">
@@ -16,6 +28,32 @@
 <main>
   <h1>What's open on Orcas Island, right now.</h1>
   <p class="lede">A free community directory of restaurants, bars, shops and services on Orcas Island, Washington, grouped by Eastsound, Ferry Landing, Westsound, Doe Bay, Deer Harbor and Rosario.</p>
+<section class="shots" aria-roledescription="carousel" aria-label="App screenshots">
+  <figure>
+    <img id="shot" src="shots/open-now.webp" width="600" height="1298" alt="">
+    <figcaption id="cap"></figcaption>
+  </figure>
+  <div class="ctl">
+    <button type="button" id="prev" aria-label="Previous screenshot">&larr;</button>
+    <span class="dots" id="dots"></span>
+    <button type="button" id="next" aria-label="Next screenshot">&rarr;</button>
+  </div>
+</section>
+<script>
+(function(){
+  var S=[["open-now","What's open right now, grouped by part of the island."],["search","Search by name or filter by type of place."],["listing-events","Hours, weekly events and one-off happenings for each listing."]];
+  var i=0,img=document.getElementById("shot"),cap=document.getElementById("cap"),dots=document.getElementById("dots"),t=null;
+  var reduce=window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches;
+  S.forEach(function(_,n){var b=document.createElement("button");b.type="button";b.setAttribute("aria-label","Screenshot "+(n+1));b.onclick=function(){go(n,true)};dots.appendChild(b)});
+  function go(n,user){i=(n+S.length)%S.length;img.src="shots/"+S[i][0]+".webp";img.alt=S[i][1];cap.textContent=S[i][1];
+    Array.prototype.forEach.call(dots.children,function(d,k){d.setAttribute("aria-current",k===i)});
+    if(user&&t){clearInterval(t);t=null}}
+  document.getElementById("prev").onclick=function(){go(i-1,true)};
+  document.getElementById("next").onclick=function(){go(i+1,true)};
+  go(0);if(!reduce)t=setInterval(function(){go(i+1)},5000);
+})();
+</script>
+
 
   <div class="card">
     <p><strong>Coming soon.</strong> The app and website are being built. Business owners will be able to keep their hours current by text message.</p>
