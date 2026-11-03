@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Admin — orcas.live</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<style>
+main{max-width:56rem}
+label{display:block;font-weight:600;font-size:.9rem;color:var(--muted);margin:.7rem 0 .2rem}
+input,select,textarea{font:inherit;width:100%;box-sizing:border-box;padding:.55rem .65rem;border:1px solid var(--rule);border-radius:8px;background:var(--bg);color:var(--fg)}
+textarea{min-height:4.5rem}
+button{font:inherit;font-weight:700;padding:.55rem 1rem;border-radius:999px;border:2px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer}
+button.primary{background:var(--accent);color:var(--bg)}
+button.link{border:0;padding:0;font-weight:600;text-decoration:underline}
+button.danger{border-color:#b3261e;color:#b3261e}
+button:disabled{opacity:.5;cursor:default}
+.row{display:flex;gap:.6rem;flex-wrap:wrap;align-items:flex-end}
+.row>*{flex:1 1 9rem;min-width:0}
+.row>.narrow{flex:0 0 auto}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));gap:0 1rem}
+.list button.item{display:flex;width:100%;justify-content:space-between;gap:.5rem;text-align:left;border:0;border-bottom:1px solid var(--rule);border-radius:0;padding:.7rem .2rem;color:var(--fg);font-weight:600}
+.badge{font-size:.78rem;font-weight:700;border:1.5px solid currentColor;border-radius:99px;padding:.05rem .5rem;color:var(--muted);white-space:nowrap}
+.badge.warn{color:#9a5b00}
+.toast{position:sticky;top:0;z-index:5;padding:.6rem .9rem;border-radius:8px;margin:.5rem 0;font-weight:600;border:1px solid var(--rule);background:var(--card)}
+.toast.err{border-color:#b3261e;color:#b3261e}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
+.hint{color:var(--muted);font-size:.9rem;margin:.3rem 0}
+.sub{margin-top:.4rem;padding:.7rem;border:1px solid var(--rule);border-radius:10px}
+</style>
+</head>
+<body>
+<header class="site">
+  <a class="brand" href="/">orcas<span>.live</span></a>
+  <nav aria-label="Main"><a href="/">Home</a><a href="/preview/">Preview</a><a href="/api">API</a></nav>
+</header>
+<main id="app"></main>
+<script>
+"use strict";
+const AREAS = [["eastsound","Eastsound"],["ferry_landing","Ferry Landing"],["westsound","Westsound"],["doe_bay","Doe Bay"],["deer_harbor","Deer Harbor"],["rosario","Rosario"],["other","Other"]];
+const KINDS = ["bar","restaurant","shop","service"];
+const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const API = (location.hostname === "localhost" && new URLSearchParams(location.search).get("api")) || "https://api.orcas.live";
+const KEY = "orcas-admin-session";
+const app = document.getElementById("app");
+let session = null, email = null, listing = [], current = null, toastEl = null;
+
+try { session = localStorage.getItem(KEY); email = localStorage.getItem(KEY + "-email"); } catch (_) {}
+
+// Build DOM without innerHTML so listing text can never be interpreted as markup.
+function h(tag, props, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (v === true) e.setAttribute(k, "");
+    else if (v !== false && v != null) e.setAttribute(k, v);
+  }
+  for (const k of kids.flat()) if (k != null && k !== false) e.append(k.nodeType ? k : document.createTextNode(String(k)));
+  return e;
+}
+function toast(msg, isErr) {
+  if (toastEl) toastEl.remove();
+  toastEl = h("div", { class: "toast" + (isErr ? " err" : ""), role: "status" }, msg);
+  app.prepend(toastEl);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+async function api(path, method = "GET", body) {
+  const res = await fetch(API + path, {
+    method,
+    headers: Object.assign({ "Content-Type": "application/json" }, session ? { Authorization: "Bearer " + session } : {}),
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && session) { signOutLocal(); render(); throw new Error(data.error || "Signed out."); }
+  if (!res.ok) throw new Error(data.error || "Request failed (" + res.status + ").");
+  return data;
+}
+function signOutLocal() { session = null; email = null; try { localStorage.removeItem(KEY); localStorage.removeItem(KEY + "-email"); } catch (_) {} }
+const t5 = (t) => (t ? String(t).slice(0, 5) : "");
+const val = (e) => (e.value.trim() === "" ? null : e.value.trim());
+const field = (label, input) => h("div", {}, h("label", {}, label), input);
+
+// ---------- login ----------
+function loginView(note) {
+  const input = h("input", { type: "email", autocomplete: "email", required: true, placeholder: "you@example.com" });
+  const btn = h("button", { class: "primary", type: "submit" }, "Email me a sign-in link");
+  return h("section", {},
+    h("h1", {}, "Admin"),
+    h("p", { class: "lede" }, "Sign in to edit listings, hours and events."),
+    note && h("div", { class: "toast" }, note),
+    h("form", { onsubmit: async (e) => {
+      e.preventDefault(); btn.disabled = true;
+      try { await api("/admin/login", "POST", { email: input.value }); app.replaceChildren(loginView("If that address is allowed, a sign-in link is on its way. It works once and expires in 15 minutes.")); }
+      catch (err) { toast(err.message, true); btn.disabled = false; }
+    } }, field("Email", input), h("p", {}, btn)));
+}
+
+// ---------- listing picker ----------
+async function pickerView() {
+  listing = await api("/admin/businesses");
+  const q = h("input", { type: "search", placeholder: "Search listings", "aria-label": "Search listings" });
+  const box = h("div", { class: "list" });
+  const draw = () => {
+    const term = q.value.trim().toLowerCase();
+    box.replaceChildren(...listing.filter((b) => !term || b.name.toLowerCase().includes(term) || b.category.includes(term)).map((b) =>
+      h("button", { class: "item", onclick: () => openListing(b.id) },
+        h("span", {}, b.name, " ", h("span", { class: "hint" }, b.category + " · " + (AREAS.find((a) => a[0] === b.area) || [0, b.area])[1])),
+        h("span", { class: "row narrow" },
+          b.status === "hidden" && h("span", { class: "badge warn" }, "hidden"),
+          b.hour_rows === 0 ? h("span", { class: "badge warn" }, "no hours") : !b.hours_confirmed_at && h("span", { class: "badge" }, "unconfirmed")))));
+  };
+  q.addEventListener("input", draw); draw();
+  return h("section", {},
+    topBar(),
+    h("div", { class: "bar" }, h("h1", {}, "Listings"), h("button", { class: "primary", onclick: () => { current = { business: { status: "unclaimed", area: "eastsound", kind: "restaurant" }, hours: [], recurring_events: [], events: [] }; render(); } }, "New listing")),
+    h("p", { class: "hint" }, listing.length + " listings. Changes show in the app within about 20 seconds."), q, box);
+}
+function topBar() {
+  return h("div", { class: "bar hint" }, h("span", {}, "Signed in as " + (email || "")),
+    h("button", { class: "link", onclick: async () => { try { await api("/admin/logout", "POST"); } catch (_) {} signOutLocal(); render(); } }, "Sign out"));
+}
+async function openListing(id) {
+  try { current = await api("/admin/businesses/" + id); render(); } catch (e) { toast(e.message, true); }
+}
+
+// ---------- editor ----------
+function sel(options, value) {
+  const s = h("select", {}, options.map(([v, l]) => h("option", { value: v }, l)));
+  s.value = value; return s;
+}
+function editorView() {
+  const b = current.business, isNew = !b.id;
+  const f = {
+    name: h("input", { value: b.name || "", required: true }),
+    area: sel(AREAS, b.area), kind: sel(KINDS.map((k) => [k, k]), b.kind),
+    category: h("input", { value: b.category || "", placeholder: "cafe, pharmacy, florist" }),
+    address: h("input", { value: b.address || "" }), phone: h("input", { value: b.phone || "", inputmode: "tel", placeholder: "(360) 555-1234" }),
+    website: h("input", { value: b.website || "", placeholder: "example.com" }), menu_url: h("input", { value: b.menu_url || "" }),
+    lat: h("input", { value: b.lat ?? "", inputmode: "decimal" }), lng: h("input", { value: b.lng ?? "", inputmode: "decimal" }),
+    status: sel([["unclaimed", "Visible"], ["claimed", "Visible, claimed by owner"], ["hidden", "Hidden from the app and API"]], b.status),
+    closed_label: h("input", { value: b.closed_label || "", placeholder: "May 2027" }),
+    closed_until: h("input", { type: "date", value: b.closed_until || "" }),
+    notes: h("textarea", {}, b.notes || ""),
+  };
+  const num = (e) => (e.value.trim() === "" ? null : Number(e.value));
+  const saveDetails = async (ev) => {
+    ev.preventDefault();
+    const body = { name: f.name.value, area: f.area.value, kind: f.kind.value, category: f.category.value, address: val(f.address), phone: val(f.phone), website: val(f.website), menu_url: val(f.menu_url), lat: num(f.lat), lng: num(f.lng), status: f.status.value, closed_label: val(f.closed_label), closed_until: val(f.closed_until), notes: val(f.notes) };
+    try {
+      if (isNew) { const r = await api("/admin/businesses", "POST", body); await openListing(r.id); toast("Listing created. Add hours and events below."); }
+      else { await api("/admin/businesses/" + b.id, "PUT", body); await openListing(b.id); toast("Details saved."); }
+    } catch (e) { toast(e.message, true); }
+  };
+  const back = h("button", { class: "link", onclick: () => { current = null; render(); } }, "← All listings");
+  const parts = [topBar(), back, h("h1", {}, isNew ? "New listing" : b.name),
+    h("form", { onsubmit: saveDetails }, h("h2", {}, "Details"),
+      h("div", { class: "grid2" }, field("Name", f.name), field("Category", f.category), field("Area", f.area), field("Type", f.kind),
+        field("Address", f.address), field("Phone", f.phone), field("Website", f.website), field("Menu link", f.menu_url),
+        field("Latitude", f.lat), field("Longitude", f.lng)),
+      field("Visibility", f.status),
+      h("div", { class: "grid2" }, field("Closed for the season: label", f.closed_label), field("Closed until (ignored after this date)", f.closed_until)),
+      h("p", { class: "hint" }, "Leave the closure fields empty for businesses that are not closed for the season."),
+      field("Notes (internal, never shown)", f.notes), h("p", {}, h("button", { class: "primary", type: "submit" }, isNew ? "Create listing" : "Save details")))];
+  if (!isNew) parts.push(hoursSection(b), eventsSection(b));
+  return h("section", {}, parts);
+}
+
+function hoursSection(b) {
+  const rows = current.hours.map((r) => ({ weekday: r.weekday, open: t5(r.open_time), close: t5(r.close_time), valid_from: r.valid_from || "", valid_to: r.valid_to || "" }));
+  const box = h("div", {});
+  const confirmed = h("input", { type: "checkbox", id: "confirmed", style: "width:auto" });
+  const draw = () => {
+    box.replaceChildren(...rows.map((r, i) => {
+      const day = sel(DAYS.map((d, n) => [n, d]), r.weekday); day.addEventListener("change", () => (r.weekday = Number(day.value)));
+      const o = h("input", { type: "time", value: r.open, "aria-label": "Opens" }); o.addEventListener("input", () => (r.open = o.value));
+      const c = h("input", { type: "time", value: r.close, "aria-label": "Closes" }); c.addEventListener("input", () => (r.close = c.value));
+      const vf = h("input", { type: "date", value: r.valid_from, "aria-label": "Season starts" }); vf.addEventListener("input", () => (r.valid_from = vf.value));
+      const vt = h("input", { type: "date", value: r.valid_to, "aria-label": "Season ends" }); vt.addEventListener("input", () => (r.valid_to = vt.value));
+      return h("div", { class: "row sub" }, field("Day", day), field("Opens", o), field("Closes", c), field("Season from", vf), field("Season to", vt),
+        h("button", { class: "danger narrow", type: "button", onclick: () => { rows.splice(i, 1); draw(); } }, "Remove"));
+    }));
+  };
+  draw();
+  const add = () => { rows.push({ weekday: rows.length ? Math.min(rows[rows.length - 1].weekday + 1, 6) : 0, open: rows.length ? rows[rows.length - 1].open : "09:00", close: rows.length ? rows[rows.length - 1].close : "17:00", valid_from: "", valid_to: "" }); draw(); };
+  const weekdays = () => {
+    if (!rows.length) return toast("Add one row first, then copy it to the other days.", true);
+    const first = rows[0];
+    for (let d = 0; d < 7; d++) if (d !== first.weekday && !rows.some((r) => r.weekday === d && !r.valid_from && !r.valid_to)) rows.push({ weekday: d, open: first.open, close: first.close, valid_from: first.valid_from, valid_to: first.valid_to });
+    rows.sort((a, c) => a.weekday - c.weekday); draw();
+  };
+  const save = async () => {
+    try {
+      await api("/admin/businesses/" + b.id + "/hours", "PUT", { rows: rows.map((r) => ({ weekday: r.weekday, open: r.open, close: r.close, valid_from: r.valid_from || null, valid_to: r.valid_to || null })), confirmed: confirmed.checked });
+      await openListing(b.id); toast("Hours saved.");
+    } catch (e) { toast(e.message, true); }
+  };
+  const status = b.hours_confirmed_at ? "Confirmed " + new Date(b.hours_confirmed_at).toLocaleDateString() : "Not confirmed by the owner";
+  return h("section", {}, h("h2", {}, "Weekly hours"),
+    h("p", { class: "hint" }, status + ". A closing time earlier than the opening time means it closes after midnight. Use season dates for hours that apply only part of the year."),
+    box,
+    h("div", { class: "row" }, h("button", { type: "button", onclick: add }, "Add row"), h("button", { type: "button", onclick: weekdays }, "Copy first row to all days")),
+    h("p", {}, h("label", { style: "display:flex;gap:.5rem;align-items:center;color:var(--fg)" }, confirmed, "These hours are verified (mark confirmed)")),
+    h("p", { class: "hint" }, "Saving without the box ticked clears any earlier confirmation, because the hours changed."),
+    h("div", { class: "row" }, h("button", { class: "primary", type: "button", onclick: save }, "Save hours"),
+      h("button", { type: "button", onclick: async () => { try { await api("/admin/businesses/" + b.id + "/confirm", "POST"); await openListing(b.id); toast("Marked as confirmed today."); } catch (e) { toast(e.message, true); } } }, "Mark current hours confirmed")));
+}
+
+function eventsSection(b) {
+  const rec = current.recurring_events.map((r) => ({ weekday: r.weekday, title: r.title, start: t5(r.start_time), end: t5(r.end_time), note: r.note || "", valid_from: r.valid_from || "", valid_to: r.valid_to || "" }));
+  const one = current.events.map((e) => ({ title: e.title, date: e.date, start: t5(e.start), end: t5(e.end), description: e.description || "" }));
+  const recBox = h("div", {}), oneBox = h("div", {});
+  const bind = (obj, key, input) => { input.addEventListener("input", () => (obj[key] = input.value)); return input; };
+  const draw = () => {
+    recBox.replaceChildren(...rec.map((r, i) => {
+      const day = sel(DAYS.map((d, n) => [n, d]), r.weekday); day.addEventListener("change", () => (r.weekday = Number(day.value)));
+      return h("div", { class: "row sub" }, field("Day", day), field("Title", bind(r, "title", h("input", { value: r.title }))), field("Starts", bind(r, "start", h("input", { type: "time", value: r.start }))),
+        field("Ends", bind(r, "end", h("input", { type: "time", value: r.end }))), field("Note", bind(r, "note", h("input", { value: r.note }))),
+        h("button", { class: "danger narrow", type: "button", onclick: () => { rec.splice(i, 1); draw(); } }, "Remove"));
+    }));
+    oneBox.replaceChildren(...one.map((e, i) =>
+      h("div", { class: "row sub" }, field("Date", bind(e, "date", h("input", { type: "date", value: e.date }))), field("Title", bind(e, "title", h("input", { value: e.title }))),
+        field("Starts", bind(e, "start", h("input", { type: "time", value: e.start }))), field("Ends", bind(e, "end", h("input", { type: "time", value: e.end }))),
+        field("Details", bind(e, "description", h("input", { value: e.description }))),
+        h("button", { class: "danger narrow", type: "button", onclick: () => { one.splice(i, 1); draw(); } }, "Remove"))));
+  };
+  draw();
+  const save = async () => {
+    try {
+      await api("/admin/businesses/" + b.id + "/events", "PUT", {
+        recurring: rec.map((r) => ({ weekday: r.weekday, title: r.title, start: r.start || null, end: r.end || null, note: r.note || null, valid_from: r.valid_from || null, valid_to: r.valid_to || null })),
+        one_time: one.map((e) => ({ title: e.title, date: e.date, start: e.start || null, end: e.end || null, description: e.description || null })),
+      });
+      await openListing(b.id); toast("Events saved.");
+    } catch (e) { toast(e.message, true); }
+  };
+  return h("section", {}, h("h2", {}, "Events"),
+    h("h3", {}, "Every week"), h("p", { class: "hint" }, "Trivia, karaoke and other regular nights. Leave the time empty if it is not known."), recBox,
+    h("p", {}, h("button", { type: "button", onclick: () => { rec.push({ weekday: 0, title: "", start: "", end: "", note: "", valid_from: "", valid_to: "" }); draw(); } }, "Add weekly event")),
+    h("h3", {}, "One-time"), h("p", { class: "hint" }, "Leave the start time empty for an all-day event. Past events from the last 30 days are shown so they can be removed."), oneBox,
+    h("p", {}, h("button", { type: "button", onclick: () => { one.push({ title: "", date: "", start: "", end: "", description: "" }); draw(); } }, "Add one-time event")),
+    h("p", {}, h("button", { class: "primary", type: "button", onclick: save }, "Save events")));
+}
+
+// ---------- boot ----------
+async function render() {
+  toastEl = null;
+  if (!session) return app.replaceChildren(loginView());
+  try { app.replaceChildren(current ? editorView() : await pickerView()); }
+  catch (e) { if (session) { app.replaceChildren(h("div", { class: "toast err" }, e.message)); } }
+}
+async function boot() {
+  const m = /^#login=([0-9a-f]{64})$/.exec(location.hash);
+  if (m) {
+    history.replaceState(null, "", location.pathname + location.search); // never leave the token in the address bar
+    try {
+      const r = await api("/admin/verify", "POST", { token: m[1] });
+      session = r.session; email = r.email;
+      try { localStorage.setItem(KEY, session); localStorage.setItem(KEY + "-email", email); } catch (_) {}
+    } catch (e) { app.replaceChildren(loginView(e.message)); return; }
+  }
+  render();
+}
+boot();
+// A sign-in link opened in a tab that already has this page loaded only changes the hash.
+addEventListener("hashchange", () => { if (/^#login=/.test(location.hash)) boot(); });
+</script>
+</body>
+</html>
