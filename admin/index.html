@@ -179,7 +179,12 @@ function editorView() {
 function hoursSection(b) {
   const rows = current.hours.map((r) => ({ weekday: r.weekday, open: t5(r.open_time), close: t5(r.close_time), valid_from: r.valid_from || "", valid_to: r.valid_to || "" }));
   const box = h("div", {});
-  const confirmed = h("input", { type: "checkbox", id: "confirmed", style: "width:auto" });
+  const byOwner = h("input", { type: "checkbox", id: "confirmed-owner", style: "width:auto" });
+  const byUs = h("input", { type: "checkbox", id: "confirmed-us", style: "width:auto" });
+  // One or the other: ticking one clears the other.
+  byOwner.addEventListener("change", () => { if (byOwner.checked) byUs.checked = false; });
+  byUs.addEventListener("change", () => { if (byUs.checked) byOwner.checked = false; });
+  const confirmedBy = () => (byOwner.checked ? "owner" : byUs.checked ? "orcas_live" : null);
   const draw = () => {
     box.replaceChildren(...rows.map((r, i) => {
       const day = sel(DAYS.map((d, n) => [n, d]), r.weekday); day.addEventListener("change", () => (r.weekday = Number(day.value)));
@@ -201,19 +206,21 @@ function hoursSection(b) {
   };
   const save = async () => {
     try {
-      await api("/admin/businesses/" + b.id + "/hours", "PUT", { rows: rows.map((r) => ({ weekday: r.weekday, open: r.open, close: r.close, valid_from: r.valid_from || null, valid_to: r.valid_to || null })), confirmed: confirmed.checked });
+      await api("/admin/businesses/" + b.id + "/hours", "PUT", { rows: rows.map((r) => ({ weekday: r.weekday, open: r.open, close: r.close, valid_from: r.valid_from || null, valid_to: r.valid_to || null })), confirmed: confirmedBy() !== null, confirmed_by: confirmedBy() });
       await openListing(b.id); toast("Hours saved.");
     } catch (e) { toast(e.message, true); }
   };
-  const status = b.hours_confirmed_at ? "Confirmed " + new Date(b.hours_confirmed_at).toLocaleDateString() : "Not confirmed by the owner";
+  const status = b.hours_confirmed_at ? "Confirmed " + new Date(b.hours_confirmed_at).toLocaleDateString() + " by " + (b.hours_confirmed_by === "owner" ? "the owner" : "Orcas.live") : "Not confirmed";
   return h("section", {}, h("h2", {}, "Weekly hours"),
     h("p", { class: "hint" }, status + ". A closing time earlier than the opening time means it closes after midnight. Use season dates for hours that apply only part of the year."),
     box,
     h("div", { class: "row" }, h("button", { type: "button", onclick: add }, "Add row"), h("button", { type: "button", onclick: weekdays }, "Copy first row to all days")),
-    h("p", {}, h("label", { style: "display:flex;gap:.5rem;align-items:center;color:var(--fg)" }, confirmed, "These hours are verified (mark confirmed)")),
-    h("p", { class: "hint" }, "Saving without the box ticked clears any earlier confirmation, because the hours changed."),
+    h("p", {}, h("label", { style: "display:flex;gap:.5rem;align-items:center;color:var(--fg)" }, byOwner, "These hours are verified by owner (mark confirmed)")),
+    h("p", {}, h("label", { style: "display:flex;gap:.5rem;align-items:center;color:var(--fg)" }, byUs, "These hours are verified by Orcas.live (mark confirmed)")),
+    h("p", { class: "hint" }, "Saving without either box ticked clears any earlier confirmation, because the hours changed."),
     h("div", { class: "row" }, h("button", { class: "primary", type: "button", onclick: save }, "Save hours"),
-      h("button", { type: "button", onclick: async () => { try { await api("/admin/businesses/" + b.id + "/confirm", "POST"); await openListing(b.id); toast("Marked as confirmed today."); } catch (e) { toast(e.message, true); } } }, "Mark current hours confirmed")));
+      ...[["owner", "Mark current hours confirmed by owner"], ["orcas_live", "Mark current hours confirmed by Orcas.live"]].map(([by, text]) =>
+        h("button", { type: "button", onclick: async () => { try { await api("/admin/businesses/" + b.id + "/confirm", "POST", { by }); await openListing(b.id); toast("Marked as confirmed today by " + (by === "owner" ? "the owner." : "Orcas.live.")); } catch (e) { toast(e.message, true); } } }, text))));
 }
 
 function eventsSection(b) {

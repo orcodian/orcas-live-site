@@ -83,7 +83,8 @@ th{color:var(--muted);font-weight:600}
   "events": [
     { "title": "Halloween DJ Dance Party", "date": "2026-10-31", "start": "21:30:00", "end": null, "description": "9:30ish to close" }
   ],
-  "last_confirmed": null
+  "last_confirmed": null,
+  "confirmed_by": null
 }</code></pre>
   <table>
     <tr><th>Field</th><th>Meaning</th></tr>
@@ -91,7 +92,8 @@ th{color:var(--muted);font-weight:600}
     <tr><td class="ep">status.state</td><td><code>open</code>, <code>closing_soon</code>, <code>opening_soon</code>, <code>closed</code> or <code>unknown</code></td></tr>
     <tr><td class="ep">status.next_change</td><td>When the current window ends if open, or when the next one starts if closed. May be null.</td></tr>
     <tr><td class="ep">stale</td><td><code>true</code> when the owner has not confirmed the hours recently, or never. Treat the hours as a best guess.</td></tr>
-    <tr><td class="ep">last_confirmed</td><td>When the owner last confirmed the hours (UTC), or null</td></tr>
+    <tr><td class="ep">last_confirmed</td><td>When the hours were last verified (UTC), or null</td></tr>
+    <tr><td class="ep">confirmed_by</td><td><code>owner</code> (confirmed by text) or <code>orcas_live</code> (checked by Orcas.live), or null</td></tr>
     <tr><td class="ep">closure</td><td>Set while closed for the season, such as <code>{"label": "May 2027", "until": "2027-05-31"}</code>. Otherwise null.</td></tr>
     <tr><td class="ep">weekly</td><td>Recurring hours. <code>weekday</code> is 0 for Monday through 6 for Sunday. A close time earlier than the open time means it closes after midnight. A day can have several rows. <code>valid_from</code> and <code>valid_to</code> mark seasonal hours.</td></tr>
     <tr><td class="ep">recurring_events</td><td>Weekly events such as trivia. <code>start</code> and <code>end</code> may be null when the time is unknown. Check <code>valid_from</code> and <code>valid_to</code> for seasonal ones.</td></tr>
