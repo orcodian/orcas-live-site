@@ -154,6 +154,12 @@ function editorView() {
       else { await api("/admin/businesses/" + b.id, "PUT", body); await openListing(b.id); toast("Details saved."); }
     } catch (e) { toast(e.message, true); }
   };
+  const saveClosure = async () => {
+    try {
+      await api("/admin/businesses/" + b.id + "/closure", "PUT", { label: val(f.closed_label), until: val(f.closed_until) });
+      await openListing(b.id); toast(f.closed_label.value.trim() ? "Closure saved." : "Reopened.");
+    } catch (e) { toast(e.message, true); }
+  };
   const back = h("button", { class: "link", onclick: () => { current = null; render(); } }, "← All listings");
   const parts = [topBar(), back, h("h1", {}, isNew ? "New listing" : b.name),
     h("form", { onsubmit: saveDetails }, h("h2", {}, "Details"),
@@ -163,6 +169,8 @@ function editorView() {
       field("Visibility", f.status),
       h("div", { class: "grid2" }, field("Closed for the season: label", f.closed_label), field("Closed until (ignored after this date)", f.closed_until)),
       h("p", { class: "hint" }, "Leave the closure fields empty for businesses that are not closed for the season."),
+      !isNew && h("p", {}, h("button", { type: "button", onclick: saveClosure }, "Save closure only"), " ",
+        h("button", { type: "button", class: "link", onclick: () => { f.closed_label.value = ""; f.closed_until.value = ""; saveClosure(); } }, "Reopen now")),
       field("Notes (internal, never shown)", f.notes), h("p", {}, h("button", { class: "primary", type: "submit" }, isNew ? "Create listing" : "Save details")))];
   if (!isNew) parts.push(hoursSection(b), eventsSection(b));
   return h("section", {}, parts);
